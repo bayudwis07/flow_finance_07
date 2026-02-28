@@ -371,6 +371,7 @@ function applyFilters() {
   // Identify inputs
   let dashStart = document.getElementById("filter-start")?.value;
   let dashEnd = document.getElementById("filter-end")?.value;
+  let dashCat = document.getElementById("filter-category")?.value || "";
 
   let transStart = document.getElementById("trans-filter-start")?.value;
   let transEnd = document.getElementById("trans-filter-end")?.value;
@@ -381,6 +382,7 @@ function applyFilters() {
   // Determine active dates based on current page context
   let activeStart = currentPage === "transactions" ? transStart : dashStart;
   let activeEnd = currentPage === "transactions" ? transEnd : dashEnd;
+  let activeCat = currentPage === "transactions" ? transCat : dashCat;
 
   // Sync Date values across views for consistency
   if (currentPage === "dashboard") {
@@ -388,11 +390,15 @@ function applyFilters() {
       document.getElementById("trans-filter-start").value = activeStart || "";
     if (document.getElementById("trans-filter-end"))
       document.getElementById("trans-filter-end").value = activeEnd || "";
+    if (document.getElementById("trans-filter-category"))
+      document.getElementById("trans-filter-category").value = activeCat || "";
   } else if (currentPage === "transactions") {
     if (document.getElementById("filter-start"))
       document.getElementById("filter-start").value = activeStart || "";
     if (document.getElementById("filter-end"))
       document.getElementById("filter-end").value = activeEnd || "";
+    if (document.getElementById("filter-category"))
+      document.getElementById("filter-category").value = activeCat || "";
   }
 
   filteredTransactions = allTransactions.filter((t) => {
@@ -403,7 +409,7 @@ function applyFilters() {
       : Infinity; // Include full end day
 
     const matchDate = tDate >= sDate && tDate <= eDate;
-    const matchCat = transCat === "" || t.category === transCat;
+    const matchCat = activeCat === "" || t.category === activeCat;
     const matchSearch =
       transSearch === "" ||
       t.description.toLowerCase().includes(transSearch) ||
@@ -412,7 +418,7 @@ function applyFilters() {
 
     if (currentPage === "transactions")
       return matchDate && matchCat && matchSearch;
-    return matchDate; // Dashboard only filters by date
+    return matchDate && matchCat; // Dashboard now filters by date and category
   });
 
   renderTransactions();
@@ -425,6 +431,8 @@ function resetDateFilter() {
     document.getElementById("filter-start").value = "";
   if (document.getElementById("filter-end"))
     document.getElementById("filter-end").value = "";
+  if (document.getElementById("filter-category"))
+    document.getElementById("filter-category").value = "";
   if (document.getElementById("trans-filter-start"))
     document.getElementById("trans-filter-start").value = "";
   if (document.getElementById("trans-filter-end"))
@@ -445,8 +453,9 @@ function openTransactionModal(prefill = null) {
   document.getElementById("modal-trans-title").innerText = "Tambah Transaksi";
 
   if (prefill) {
-    if (prefill.id) {
-      document.getElementById("edit-id").value = prefill.id;
+    if (prefill.__backendId) {
+      // Fixed: using __backendId instead of id
+      document.getElementById("edit-id").value = prefill.__backendId;
       document.getElementById("modal-trans-title").innerText = "Edit Transaksi";
     }
     try {
@@ -494,7 +503,7 @@ async function handleTransactionSubmit(e) {
   const editId = document.getElementById("edit-id").value;
   const payload = {
     action: "tambahTransaksi",
-    id: editId || crypto.randomUUID(),
+    id: editId || "TRX-" + Date.now(),
     tanggal: document.getElementById("trans-date").value,
     tipe:
       document.querySelector('input[name="trans-type"]:checked').value ===
@@ -608,23 +617,46 @@ function loadCategories() {
     category: c,
   }));
 
+  const optClass = 'class="dark:bg-slate-800"';
+
   // Populate Transaction Modal Category
   const selectCat = document.getElementById("trans-category");
   if (selectCat)
     selectCat.innerHTML =
-      '<option value="">Pilih Kategori</option>' +
+      `<option value="" ${optClass}>Pilih Kategori</option>` +
       categories
-        .map((c) => `<option value="${c.category}">${c.category}</option>`)
+        .map(
+          (c) =>
+            `<option value="${c.category}" ${optClass}>${c.category}</option>`,
+        )
         .join("");
+
+  // Populate Dashboard Filter Category
+  const dashFilterCat = document.getElementById("filter-category");
+  if (dashFilterCat) {
+    const currentVal = dashFilterCat.value;
+    dashFilterCat.innerHTML =
+      `<option value="" ${optClass}>Semua Kategori</option>` +
+      categories
+        .map(
+          (c) =>
+            `<option value="${c.category}" ${optClass}>${c.category}</option>`,
+        )
+        .join("");
+    dashFilterCat.value = currentVal;
+  }
 
   // Populate Transaction Filter Category
   const filterCat = document.getElementById("trans-filter-category");
   if (filterCat) {
     const currentVal = filterCat.value;
     filterCat.innerHTML =
-      '<option value="">Semua Kategori</option>' +
+      `<option value="" ${optClass}>Semua Kategori</option>` +
       categories
-        .map((c) => `<option value="${c.category}">${c.category}</option>`)
+        .map(
+          (c) =>
+            `<option value="${c.category}" ${optClass}>${c.category}</option>`,
+        )
         .join("");
     filterCat.value = currentVal; // Restore selection
   }
@@ -718,9 +750,12 @@ function openBudgetModal(prefillCat = null, prefillLimit = null) {
   const m = document.getElementById("modal-budget");
   const select = document.getElementById("budget-category");
   select.innerHTML =
-    '<option value="">Pilih kategori...</option>' +
+    '<option value="" class="dark:bg-slate-800">Pilih kategori...</option>' +
     categories
-      .map((c) => `<option value="${c.category}">${c.category}</option>`)
+      .map(
+        (c) =>
+          `<option value="${c.category}" class="dark:bg-slate-800">${c.category}</option>`,
+      )
       .join("");
 
   if (prefillCat) {
@@ -1278,7 +1313,7 @@ function exportPDF() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
   doc.setFont("helvetica", "bold");
-  doc.text("Laporan Keuangan", 14, 15);
+  doc.text("Laporan FinanceFlow", 14, 15);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   doc.text(`Dibuat: ${new Date().toLocaleDateString("id-ID")}`, 14, 22);
@@ -1297,17 +1332,6 @@ function exportPDF() {
     theme: "grid",
     styles: { fontSize: 8 },
     headStyles: { fillColor: [59, 130, 246] },
-    didDrawPage: function (data) {
-      const pageHeight = doc.internal.pageSize.height;
-      doc.setFontSize(8);
-      doc.setTextColor(150);
-      doc.text(
-        "© BAYU DWI SUHARMINTO | IG: bayudwis_07",
-        doc.internal.pageSize.width / 2,
-        pageHeight - 5,
-        { align: "center" },
-      );
-    },
   });
   doc.save(`Laporan_${Date.now()}.pdf`);
 }
